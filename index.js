@@ -1,27 +1,42 @@
-require('dotenv').config();
-const cors = require('cors');
-const express = require('express');
-const mongoose = require('mongoose');
-const mongoString = process.env.DATABASE_URL;
-
-mongoose.connect(mongoString);
-const database = mongoose.connection;
-
-database.on('error', (error) => {
-    console.log(error)
-})
-
-database.once('connected', () => {
-    console.log('Database Connected');
-})
+const express = require("express");
 const app = express();
-app.use(cors())
+const mongoose = require("mongoose");
+const morgan = require("morgan");
+const bodyParser = require("body-parser");
+var cookieParser = require("cookie-parser");
+
+const cors = require("cors");
+const dotenv = require("dotenv");
+dotenv.config();
+
+mongoose
+  .connect(process.env.DATABASE_URL, {
+    useNewUrlParser: true,
+  })
+  .then(() => console.log("DB Connected"));
+
+mongoose.connection.on("error", (err) => {
+  console.log(`DB connection error: ${err.message}`);
+});
+// bring in routes
+
+const authRoutes = require("./routes/auth");
+
+// middleware -
+app.use(morgan("dev"));
 app.use(express.json());
+app.use(cookieParser());
+app.use(cors());
 
-const routes = require('./routes/routes');
+app.use("/api", authRoutes);
 
-app.use('/api', routes)
+app.use(function (err, req, res, next) {
+  if (err.name === "UnauthorizedError") {
+    res.status(401).json({ error: "Unauthorized!" });
+  }
+});
 
-app.listen(3000, () => {
-    console.log(`Server Started at ${3000}`)
-})
+const port = process.env.PORT || 8080;
+app.listen(port, () => {
+  console.log(`A Node Js API is listening on port: ${port}`);
+});
