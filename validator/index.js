@@ -1,31 +1,29 @@
 const { body } = require("express-validator");
 
-exports.createPostValidator = (req, res, next) => {
+exports.createPostValidator = [
   // title
-  req.check("title", "Write a title").notEmpty();
-  req.check("title", "Title must be between 4 to 150 characters").isLength({
+  body("title", "Write a title").notEmpty(),
+  body("title", "Title must be between 4 to 150 characters").isLength({
     min: 4,
     max: 150,
-  });
-  // body
-  req.check("body", "Write a body").notEmpty();
-  req.check("body", "Body must be between 4 to 2000 characters").isLength({
+  }),
+  body("body", "Write a body").notEmpty(),
+  body("body", "Body must be between 4 to 2000 characters").isLength({
     min: 4,
     max: 2000,
-  });
-  // check for errors
-  const errors = req.validationErrors();
-  // if error show the first one as they happen
-  if (errors) {
-    const firstError = errors.map((error) => error.msg)[0];
-    return res.status(400).json({ error: firstError });
-  }
-  // proceed to next middleware
-  next();
-};
+  }),
+];
 
 exports.userSignupValidationRules = [
-  body("name").notEmpty().withMessage("Name is required"),
+  body("firstName").notEmpty().withMessage("fistName is required"),
+  body("lastName").notEmpty().withMessage("lastName is required"),
+  body("dob")
+    .notEmpty()
+    .withMessage("dob is required")
+    .isDate()
+    .withMessage("Invalid dob date format"),
+  body("address").notEmpty().withMessage("address is required"),
+  body("gender").notEmpty().withMessage("gender is required"),
   body("email", "Email must be between 3 to 32 characters")
     .matches(/.+\@.+\..+/)
     .withMessage("Email must contain @")

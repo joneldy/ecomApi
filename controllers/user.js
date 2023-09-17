@@ -1,22 +1,20 @@
 const _ = require("lodash");
 const User = require("../models/user");
-const formidable = require("formidable");
-const fs = require("fs");
 
-exports.userById = (req, res, next, id) => {
-  User.findById(id)
-    // populate followers and following users array
-    .populate("following", "_id name")
-    .populate("followers", "_id name")
-    .exec((err, user) => {
-      if (err || !user) {
-        return res.status(400).json({
-          error: "User not found",
-        });
-      }
-      req.profile = user; // adds profile object in req with user info
-      next();
+exports.userById = async (req, res, next, id) => {
+  try {
+    const user = await User.findById(id)
+      // populate followers and following users array
+      .populate("following", "_id name")
+      .populate("followers", "_id name")
+      .exec();
+    req.profile = user; // adds profile object in req with user info
+    next();
+  } catch (error) {
+    return res.status(400).json({
+      error: "User not found",
     });
+  }
 };
 
 exports.hasAuthorization = (req, res, next) => {
@@ -36,74 +34,38 @@ exports.hasAuthorization = (req, res, next) => {
   next();
 };
 
-exports.allUsers = (req, res) => {
-  User.find((err, users) => {
-    if (err) {
-      return res.status(400).json({
-        error: err,
-      });
-    }
+exports.allUsers = async (req, res) => {
+  try {
+    const users = await User.find({})
+      .select("name email updated created role")
+      .exec();
     res.json(users);
-  }).select("name email updated created role");
-};
-
-exports.getUser = (req, res) => {
-  req.profile.hashed_password = undefined;
-  req.profile.salt = undefined;
-  return res.json(req.profile);
-};
-
-// exports.updateUser = (req, res, next) => {
-//     let user = req.profile;
-//     user = _.extend(user, req.body); // extend - mutate the source object
-//     user.updated = Date.now();
-//     user.save(err => {
-//         if (err) {
-//             return res.status(400).json({
-//                 error: "You are not authorized to perform this action"
-//             });
-//         }
-//         user.hashed_password = undefined;
-//         user.salt = undefined;
-//         res.json({ user });
-//     });
-// };
-
-exports.updateUser = (req, res, next) => {
-  let form = new formidable.IncomingForm();
-  // console.log("incoming form data: ", form);
-  form.keepExtensions = true;
-  form.parse(req, (err, fields, files) => {
-    if (err) {
-      return res.status(400).json({
-        error: "Photo could not be uploaded",
-      });
-    }
-    // save user
-    let user = req.profile;
-    // console.log("user in update: ", user);
-    user = _.extend(user, fields);
-
-    user.updated = Date.now();
-    // console.log("USER FORM DATA UPDATE: ", user);
-
-    if (files.photo) {
-      user.photo.data = fs.readFileSync(files.photo.path);
-      user.photo.contentType = files.photo.type;
-    }
-
-    user.save((err, result) => {
-      if (err) {
-        return res.status(400).json({
-          error: err,
-        });
-      }
-      user.hashed_password = undefined;
-      user.salt = undefined;
-      // console.log("user after update with formdata: ", user);
-      res.json(user);
+  } catch (error) {
+    return res.status(400).json({
+      error: error,
     });
-  });
+  }
+};
+
+exports.updateUser = async (req, res, next) => {
+  let user = req.profile;
+  user = _.extend(user, req.body); // extend - mutate the source object
+  user.photo = {
+    data: req.file.buffer,
+    contentType: req.file.mimetype,
+  };
+  user.updated = Date.now();
+
+  try {
+    await user.save();
+    user.hashed_password = undefined;
+    user.salt = undefined;
+    res.json({ user });
+  } catch (error) {
+    return res.status(400).json({
+      error: "You are not authorized to perform this action",
+    });
+  }
 };
 
 exports.userPhoto = (req, res, next) => {
@@ -114,48 +76,35 @@ exports.userPhoto = (req, res, next) => {
   next();
 };
 
-exports.deleteUser = (req, res, next) => {
+exports.deleteUser = async (req, res, next) => {
   let user = req.profile;
-  user.remove((err, user) => {
-    if (err) {
-      return res.status(400).json({
-        error: err,
-      });
-    }
+  try {
+    await user.deleteOne();
     res.json({ message: "User deleted successfully" });
-  });
-};
-
-// follow unfollow
-exports.addFollowing = (req, res, next) => {
-  User.findByIdAndUpdate(
-    req.body.userId,
-    { $push: { following: req.body.followId } },
-    (err, result) => {
-      if (err) {
-        return res.status(400).json({ error: err });
-      }
-      next();
-    }
-  );
-};
-
-exports.addFollower = (req, res) => {
-  User.findByIdAndUpdate(
-    req.body.followId,
-    { $push: { followers: req.body.userId } },
-    { new: true }
-  )
-    .populate("following", "_id name")
-    .populate("followers", "_id name")
-    .exec((err, result) => {
-      if (err) {
-        return res.status(400).json({
-          error: err,
-        });
-      }
-      result.hashed_password = undefined;
-      result.salt = undefined;
-      res.json(result);
+  } catch (error) {
+    console.log("error ", error);
+    return res.status(400).json({
+      error: error,
     });
+  }
+};
+
+exports.getUser = (req, res) => {
+  req.profile.hashed_password = undefined;
+  req.profile.salt = undefined;
+  return res.json(req.profile);
+};
+
+exports.hasAuthorization = (req, res, next) => {
+  let sameUser = req.profile && req.auth && req.profile._id == req.auth._id;
+  let adminUser = req.profile && req.auth && req.auth.role === "admin";
+
+  const authorized = sameUser || adminUser;
+
+  if (!authorized) {
+    return res.status(403).json({
+      error: "User is not authorized to perform this action",
+    });
+  }
+  next();
 };

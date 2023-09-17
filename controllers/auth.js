@@ -4,6 +4,19 @@ const { expressjwt } = require("express-jwt");
 const User = require("../models/user");
 const _ = require("lodash");
 
+exports.userById = async (req, res, next, id) => {
+  try {
+    req.profile = await User.findById(id)
+      // populate followers and following users array
+      .populate("following", "_id name")
+      .populate("followers", "_id name")
+      .exec();
+    next();
+  } catch (error) {
+    console.log(error);
+  }
+};
+
 exports.signup = async (req, res) => {
   const userExists = await User.findOne({ email: req.body.email });
   if (userExists)
@@ -37,7 +50,8 @@ exports.signin = async (req, res) => {
     // generate a token with user id and secret
     const token = jwt.sign(
       { _id: user._id, role: user.role },
-      process.env.JWT_SECRET
+      process.env.JWT_SECRET,
+      { algorithm: "HS256" }
     );
     // persist the token as 't' in cookie with expiry date
     res.cookie("t", token, { expire: new Date() + 9999 });
@@ -58,5 +72,5 @@ exports.signout = (req, res) => {
 exports.requireSignin = expressjwt({
   secret: process.env.JWT_SECRET,
   userProperty: "auth",
-  algorithms: ["RS256"],
+  algorithms: ["HS256"],
 });
